@@ -38,3 +38,4 @@ while True:
     
     # Add the bot's response to the conversation history
     chat_history.append(response)
+  
