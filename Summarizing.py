@@ -18,12 +18,14 @@ while True:
         if chat_history:
             history_text = " ".join(chat_history)
             input_ids = tokenizer.encode("summarize: " + history_text, return_tensors="pt")
-            summary_ids = model.generate(input_ids, max_length=100, min_length=20, length_penalty=2.0, num_beams=4)
+            summary_ids = model.generate(input_ids, max_length=100, min_length=20, length_penalty=2.0, num_beams=4, early_stopping=True)
             summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
             print(f"Summary: {summary}")
         else:
             print("No conversation history to summarize.")
-        continue
+        
+        # Exit after summarizing
+        break
 
     # Tokenize the user input and add it to the conversation history
     chat_history.append(user_input)
