@@ -2,7 +2,7 @@ import os
 from dotenv import load_dotenv
 from transformers import T5Tokenizer, T5ForConditionalGeneration, Trainer, TrainingArguments
 from datasets import load_dataset
-from huggingface_hub import login, Repository
+from huggingface_hub import login
 
 # Load environment variables from the .env file
 load_dotenv()
@@ -23,28 +23,40 @@ repo_id = "zayn303/tuned-T5-small"
 tokenizer = T5Tokenizer.from_pretrained("t5-small")
 model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
-# Load and preprocess the dataset with streaming enabled
+# Load dataset with streaming mode enabled
 dataset = load_dataset("jordiclive/wikipedia-summary-dataset", streaming=True)
 
+# Preprocessing function to tokenize input (full_text) and target (summary)
 def preprocess_function(examples):
-    # Use 'full_text' as the article (input) and 'summary' as the target (output)
+    # Input: full_text (the article)
     inputs = ["summarize: " + doc for doc in examples["full_text"]]
     model_inputs = tokenizer(inputs, max_length=512, truncation=True)
     
-    # Setup the tokenizer for targets (using 'summary')
+    # Target: summary (the summary of the article)
     with tokenizer.as_target_tokenizer():
         labels = tokenizer(examples["summary"], max_length=150, truncation=True)
 
     model_inputs["labels"] = labels["input_ids"]
     return model_inputs
 
-# Stream the dataset and preprocess it
-tokenized_datasets = dataset.map(preprocess_function, batched=True)
+# Split streaming dataset into training and validation
+def split_streaming_dataset(dataset, split_ratio=0.9):
+    dataset = list(dataset)  # Convert the streamed dataset into a list
+    split_idx = int(len(dataset) * split_ratio)
+    return dataset[:split_idx], dataset[split_idx:]
+
+# Since there's no validation set in the dataset, we manually split the training data
+streamed_dataset = dataset['train']
+train_data, validation_data = split_streaming_dataset(streamed_dataset, split_ratio=0.9)
+
+# Preprocess both the train and validation datasets
+train_dataset = map(preprocess_function, train_data)
+validation_dataset = map(preprocess_function, validation_data)
 
 # Set up training arguments
 training_args = TrainingArguments(
     output_dir="./results",
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     learning_rate=2e-5,
     per_device_train_batch_size=4,
     per_device_eval_batch_size=4,
@@ -57,13 +69,13 @@ training_args = TrainingArguments(
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=tokenized_datasets["train"],
-    eval_dataset=tokenized_datasets["validation"],
+    train_dataset=train_dataset,
+    eval_dataset=validation_dataset,
 )
 
 # Train the model
 trainer.train()
 
-# Save the model and push it to Hugging Face Hub
+# Save the model and tokenizer and push them to the Hugging Face Hub
 model.save_pretrained(repo_id, push_to_hub=True)
 tokenizer.save_pretrained(repo_id, push_to_hub=True)
