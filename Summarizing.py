@@ -1,41 +1,33 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import T5Tokenizer, T5ForConditionalGeneration
+import os
+from dotenv import load_dotenv
+from huggingface_hub import login
 
-# Load tokenizer and model
-tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-large")
-model = AutoModelForSeq2SeqLM.from_pretrained("google/flan-t5-large")
+# Load environment variables from the .env file
+load_dotenv()
 
-chat_history = []
+# Get the Hugging Face token from the .env file
+hf_token = os.getenv("huggingface_token")
 
-while True:
-    user_input = input("You: ")
-    
-    if user_input.lower() == 'exit':
-        break
+if not hf_token:
+    raise ValueError("Hugging Face token not found. Make sure it's set in the .env file.")
 
-    # If user requests a summary of the conversation
-    if user_input.lower() == 'summarize':
-        if chat_history:
-            history_text = " ".join(chat_history)
-            input_ids = tokenizer.encode("summarize: " + history_text, return_tensors="pt")
-            summary_ids = model.generate(input_ids, max_length=40, min_length=20, length_penalty=2.0, num_beams=4, early_stopping=True)
-            summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
-            print(f"Summary: {summary}")
-        else:
-            print("No conversation history to summarize.")
-        
-        # Exit after summarizing
-        break
+# Log in using the token
+login(hf_token)
 
-    # Tokenize the user input and add it to the conversation history
-    chat_history.append(user_input)
-    new_user_input_ids = tokenizer.encode(user_input, return_tensors='pt')
+# Load tokenizer and model for summarization
+tokenizer = T5Tokenizer.from_pretrained("tuned-T5-small")
+model = T5ForConditionalGeneration.from_pretrained("tuned-T5-small")
 
-    # Generate a response
-    response_ids = model.generate(new_user_input_ids, max_length=1000, pad_token_id=tokenizer.eos_token_id)
-    response = tokenizer.decode(response_ids[0], skip_special_tokens=True)
-    print(f"Bot: {response}")
-    
-    # Add the bot's response to the conversation history
-    chat_history.append(response)
-  
+# Get text input from the user to summarize
+text_to_summarize = input("Please enter the text you want to summarize:\n")
+
+# Preprocess and encode the text for summarization
+input_ids = tokenizer.encode("summarize: " + text_to_summarize, return_tensors="pt")
+
+# Generate summary
+summary_ids = model.generate(input_ids, max_length=60, min_length=30, length_penalty=2.0, num_beams=4, early_stopping=True)
+
+# Decode and print the summary
+summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+print(f"\nSummary: {summary}")
